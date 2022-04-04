@@ -54,8 +54,6 @@ def parsers():
                         help="Path of the pretrained model.")
     parser.add_argument("--output_model_path", default="/home/dctuyen/K-BART/k-distilroberta-gpt2/roberta/KDRB_GPT2_model.bin", type=str,
                         help="Path of the output model.")
-    parser.add_argument("--vocab_path", default="/home/dctuyen/K-BART/k-distilroberta-gpt2/roberta/vocab.json", type=str,
-                        help="Path of the vocabulary file.")
     parser.add_argument("--train_path", default="/home/dctuyen/K-BART/k-distilroberta-gpt2/datasets/medical_train.tsv",type=str,
                         help="Path of the trainset.")
     parser.add_argument("--dev_path", default="/home/dctuyen/K-BART/k-distilroberta-gpt2/datasets/medical_val.tsv",type=str,
@@ -160,15 +158,6 @@ class Medical_Datset(Dataset):
                 except:
                     pass
         return columns
-
-    def load_vocab(self):
-        f = open(self.args.vocab_path)
-        vocab = json.load(f)
-        f.close()
-        print(200 * '-')
-        print("Vocabulary Size: ", len(vocab))
-        print(200 * '-')
-        return vocab
     
     def __len__(self): 
         return len(self.sentences)
@@ -315,8 +304,8 @@ def get_model(args, decoder_tokenizer, device,special_tokens = None, load_model_
                                                 add_cross_attention = True, 
                                                 use_cache = False)
 
-    d_roberta_base = RobertaModel.from_pretrained('distilroberta-base')
-    d_roberta_base_tokenizer = RobertaTokenizerFast.from_pretrained('distilroberta')
+    d_roberta_base = RobertaModel.from_pretrained(args.encoder_model_name)
+    d_roberta_base_tokenizer = RobertaTokenizerFast.from_pretrained(args.encoder_model_name)
     training_args.output_dir = args.encoder_model_path
     encoder_model_path = f'{training_args.output_dir}/distilroBERTa-base-{model_args.max_pos}'
     if not os.path.exists(encoder_model_path): 
@@ -491,12 +480,13 @@ def main():
 
     print("Batch size: ", args.batch_size)
     print("The number of training instances:", instances_num)
-
+    args.learning_rate = model_args.learning_rate
+    args.warmup_steps = model_args.warmup_steps
     optimizer = AdamW(model.parameters(), lr = args.learning_rate)
     lr_scheduler = get_scheduler(
         "linear", 
         optimizer = optimizer, 
-        num_warmup = 0, 
+        num_warmup = args.warmup_steps, 
         num_training_steps = num_training_steps
     )
 
@@ -575,6 +565,7 @@ def main():
         with open(path_log, mode = "w") as outfile: 
             json.dump(info, outfile)
 
+        model.encoder = copy_proj_layers(model.encoder)
         ttl = float(total_losses[-1])
         if ttl < best_result: 
             best_result = ttl
